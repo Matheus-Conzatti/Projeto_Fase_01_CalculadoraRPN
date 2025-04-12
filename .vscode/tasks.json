@@ -1,0 +1,52 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compilar (make)",
+            "type": "shell",
+            "command": "make",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}/output"
+            }
+        },
+        {
+            "label": "Upload para Arduino",
+            "type": "shell",
+            "command": "make upload",
+            "group": "build",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}/output"
+            }
+        },
+        {
+            "label": "Abrir Monitor Serial",
+            "type": "shell",
+            "command": "make monitor",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}/output"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Limpar (clean)",
+            "type": "shell",
+            "command": "make clean",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}/output"
+            }
+        },
+    ]
+}

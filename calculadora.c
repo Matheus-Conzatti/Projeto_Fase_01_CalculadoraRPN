@@ -229,40 +229,42 @@ void geraAssembly(char *exp, FILE *arqAssembly){
             float16 hA = conversaofloatHalf(a);
             float16 hB = conversaofloatHalf(b);
 
-            fprintf(arqAssembly, "    ; Carrega A em r16 (LSB) e r17 (MSB)\n");
-            fprintf(arqAssembly, "    ldi r16, 0x%02X\n", hA & 0xFF);
-            fprintf(arqAssembly, "    ldi r17, 0x%02X\n", (hA >> 8) & 0xFF);
-            fprintf(arqAssembly, "    ; Carrega B em r18 (LSB) e r19 (MSB)\n");
-            fprintf(arqAssembly, "    ldi r18, 0x%02X\n", hB & 0xFF);
-            fprintf(arqAssembly, "    ldi r19, 0x%02X\n", (hB >> 8) & 0xFF);
+            fprintf(arqAssembly, "    ; Operando A (0x%04X)\n", hA);
+            fprintf(arqAssembly, "    ldi r20, 0x%02X\n", hA & 0xFF);
+            fprintf(arqAssembly, "    ldi r21, 0x%02X\n", hA >> 8);
 
-            // Chama as sub-rotinas
+            fprintf(arqAssembly, "    ; Operando B (0x%04X)\n", hB);
+            fprintf(arqAssembly, "    ldi r22, 0x%02X\n", hB & 0xFF);
+            fprintf(arqAssembly, "    ldi r23, 0x%02X\n", hB >> 8);
+
             if(strcmp(token, "+") == 0) fprintf(arqAssembly, "    call add_avr\n");
             else if(strcmp(token, "-") == 0) fprintf(arqAssembly, "    call sub_avr\n");
             else if(strcmp(token, "*") == 0) fprintf(arqAssembly, "    call mul_avr\n");
             else if(strcmp(token, "/") == 0) fprintf(arqAssembly, "    call div_avr\n");
-            else if(strcmp(token, "^") == 0) fprintf(arqAssembly, "    call pow_avr\n");
+            else if(strcmp(token , "^") == 0) fprintf(arqAssembly, "    call pow_avr\n");
             else if(strcmp(token, "%") == 0) fprintf(arqAssembly, "    call mod_avr\n");
 
-            fprintf(arqAssembly, "    ; Envia resultado via UART (em hexadecimal)\n");
-            fprintf(arqAssembly, "    mov r30, r20 ; LSB -> r30\n");
-            fprintf(arqAssembly, "    mov r31, r21 ; MSB -> r31\n");
-            fprintf(arqAssembly, "    call print_hex\n");
+            fprintf(arqAssembly, "    call envia_uart\n");
 
-            // Faz o empilhamento dos resultados
-            float resultado = operacao(a, b, token[0]);
-            pilha[++topo] = resultado;
+            float res = operacao(a, b, token[0]);
+            pilha[++topo] = res;
         }else{
-            float valor = atof(token);
-            pilha[++topo] = valor;
+            // Empilhar e armazenar o half
+            float num = atof(token);
+            float16 h = conversaofloatHalf(num);
+
+            fprintf(arqAssembly, "    ; Empilha %.4f (0x%04X)\n", num, h);
+            fprintf(arqAssembly, "    ldi r24, 0x%02X\n", h & 0xFF);
+            fprintf(arqAssembly, "    ldi r25, 0x%02X\n", h >> 8);
+            fprintf(arqAssembly, "    call envia_uart\n");
+
+            pilha[++topo] = num;
         }
         token = strtok(NULL, " ");
     }
 
     if(!escritaEnd){
-        fprintf(arqAssembly, "    call uart_send_result\n");
-        fprintf(arqAssembly, "end:\n");
-        fprintf(arqAssembly, "    rjmp end\n");
+        fprintf(arqAssembly, "\n    rjmp .\n"); // Loop infinito no final do programa
         escritaEnd = 1;
     }
 }

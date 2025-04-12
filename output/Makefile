@@ -30,7 +30,7 @@ $(HEX): $(ELF)
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
 
 upload:
-	avrdude -c arduino -p atmega328p -P COM5 -b $(BAUD) -U flash:w:calculadora.hex:i
+	avrdude -c arduino -p atmega328p -P $(PORT) -b 115200 -U flash:w:calculadora.hex:i
 
 monitor:
 	cmd /C type COM5
