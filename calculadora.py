@@ -1,114 +1,136 @@
-import numpy as np
 import re
+import math
 
+# Lista para armazenar os resultados anteriores
 resultadoHalf = []
-contResultado = 0
-memoria = 0.0
+# Dicionário para simular memória
+memoria = {}
 
-class Pilha:
-    def __init__(self, capacidade):
-        self.capacidade = capacidade
-        self.topo = -1
-        self.valores = np.empty(self.capacidade, dtype=np.float32)
+def float_to_float16(value):
+    import struct
+    f = struct.unpack('>I', struct.pack('>f', value))[0]
+    sign = (f >> 31) & 0x1
+    exponent = (f >> 23) & 0xFF
+    mantissa = f & 0x7FFFFF
 
-    def cheia(self):
-        return self.topo == self.capacidade - 1
-    
-    def vazia(self):
-        return self.topo == -1
-    
-    def empilhar(self, valor):
-        if self.cheia():
-            print('A pilha está cheia!')
-        else:
-            self.topo += 1
-            self.valores[self.topo] = valor
-
-    def desempilhar(self):
-        if self.vazia():
-            print('A pilha está vazia!')
-            return None
-        else:
-            valor = self.valores[self.topo]
-            self.topo -= 1
-            return valor
-
-def float32Tofloat16(valor):
-    return np.float16(valor)
-
-def float16Tofloat32(valor):
-    return float(np.float32(valor))
-
-def operacao(a, b, op):
-    if op == '+': return a + b
-    elif op == '-': return a - b
-    elif op == '*': return a * b
-    elif op == '/': return a / b if b != 0 else 0
-    elif op == '^': return a ** b
-    elif op == '%': return a % b
+    if exponent == 0:  # zero / subnormal
+        exp16 = 0
+        man16 = 0
+    elif exponent == 0xFF:  # inf / NaN
+        exp16 = 0x1F
+        man16 = 0
     else:
-        raise ValueError(f"Operação inválida: {op}")
+        exp16 = exponent - 127 + 15
+        if exp16 <= 0:
+            exp16 = 0
+            man16 = 0
+        elif exp16 >= 0x1F:
+            exp16 = 0x1F
+            man16 = 0
+        else:
+            man16 = mantissa >> 13
 
-def resolveExp(expressao):
-    global memoria, contResultado, resultadoHalf
-    tokens = expressao.strip().split()
-    pilha = Pilha(100)
+    return (sign << 15) | (exp16 << 10) | man16
+
+def float16_to_float(h):
+    import struct
+    s = int((h >> 15) & 0x00000001)    # sign
+    e = int((h >> 10) & 0x0000001f)    # exponent
+    f = int(h & 0x000003ff)           # fraction
+
+    if e == 0:
+        if f == 0:
+            return float((-1)**s * 0.0)
+        else:
+            return (-1)**s * 2**(-14) * (f / 1024)
+    elif e == 31:
+        return float('inf') if f == 0 else float('nan')
+    else:
+        return (-1)**s * 2**(e - 15) * (1 + f / 1024)
+
+def resolverExp(expressao):
+    global resultadoHalf, memoria
+    # Expressão regular: agrupando entre parênteses ou separando por espaços
+    tokens = re.findall(r'\([^)]*\)|\S+', expressao)
+    pilha = []
 
     for token in tokens:
-        if token.startswith('('):
-            if 'RES' in token:
-                match = re.search(r'\((\d+)\s*RES\)', token)
-                if match:
-                    n = int(match.group(1))
-                    if 0 <= n < contResultado:
-                        valor = float16Tofloat32(resultadoHalf[n])
-                        pilha.empilhar(valor)
-                    else:
-                        print(f"Resultado {n} não encontrado.")
-            elif 'V MEM' in token:
-                match = re.search(r'\(V MEM\s+([-+]?\d*\.?\d+)\)', token)
-                if match:
-                    memoria = float(match.group(1))
-            elif 'MEM' in token:
-                pilha.empilhar(memoria)
-        elif token in "+-/*^%":
-            if pilha.topo >= 1:
-                n1 = pilha.desempilhar()
-                n2 = pilha.desempilhar()
-                resultado = operacao(n2, n1, token)
-                pilha.empilhar(resultado)
-                h = float32Tofloat16(resultado)
-                resultadoHalf.append(h)
-                contResultado += 1
-            else:
-                print("Erro: Pilha não tem elementos suficientes.")
+        if token in ['+', '-', '*', '/', '^', '%']:
+            if len(pilha) < 2:
+                print("\tErro: elementos insuficientes na pilha")
+                return 0
+            b = pilha.pop()
+            a = pilha.pop()
+
+            if token == '+':
+                pilha.append(a + b)
+            elif token == '-':
+                pilha.append(a - b)
+            elif token == '*':
+                pilha.append(a * b)
+            elif token == '/':
+                pilha.append(a / b if b != 0 else 0)
+            elif token == '^':
+                pilha.append(a ** b)
+            elif token == '%':
+                pilha.append(a % b)
+        elif token.startswith('(') and token.endswith(')'):
+            conteudo = token[1:-1].strip()
+            if conteudo.endswith("RES"):
+                idx = conteudo.split()[0]
+                try:
+                    index = int(idx)
+                    valor = float16_to_float(resultadoHalf[index])
+                    pilha.append(valor)
+                except:
+                    print(f"\tErro ao acessar resultado anterior: {token}")
+                    return 0
+            elif conteudo.startswith("MEM"):
+                try:
+                    endereco = int(conteudo.split()[1])
+                    valor = memoria.get(endereco, 0)
+                    pilha.append(valor)
+                except:
+                    print(f"\tErro ao acessar memória: {token}")
+                    return 0
+            elif conteudo.startswith("V MEM"):
+                try:
+                    partes = conteudo.split()
+                    endereco = int(partes[2])
+                    valor = float(partes[3])
+                    memoria[endereco] = valor
+                except:
+                    print(f"\tErro ao salvar na memória: {token}")
+                    return 0
         else:
             try:
-                valor = float(token)
-                pilha.empilhar(valor)
-                h = float32Tofloat16(valor)
-                resultadoHalf.append(h)
-                contResultado += 1
-            except ValueError:
-                print(f"Token inválido: {token}")
-    
-    if not pilha.vazia():
-        return pilha.desempilhar()
-    else:
-        return 0.0
+                num = float(token)
+                pilha.append(num)
+            except:
+                print(f"\tToken inválido: '{token}'")
 
-# Lista de arquivos a serem processados
-arquivos = ['expressoes1.txt', 'expressoes2.txt', 'expressoes3.txt']
+    if len(pilha) == 0:
+        print("\tPilha vazia!")
+        return 0
 
-for nome in arquivos:
-    print(f"\nArquivo: {nome}")
-    try:
-        with open(nome, 'r', encoding='utf-8') as f:
-            linhas = f.readlines()
-            for i, linha in enumerate(linhas, 1):
-                if linha.strip() == "":
+    resultado = pilha[-1]
+    resultadoHalf.append(float_to_float16(resultado))
+    return resultado
+
+def lerArquivos(nomes):
+    for nome in nomes:
+        print(f"\nResultados do arquivo {nome}:")
+        with open(nome, 'r') as arquivo:
+            for linha in arquivo:
+                linha = linha.strip()
+                if not linha:
                     continue
-                resultado = resolveExp(linha)
-                print(f"Linha {i:2d}: {linha.strip():<30} => Resultado: {resultado}")
-    except FileNotFoundError:
-        print(f"Arquivo não encontrado: {nome}")
+                resultado = resolverExp(linha)
+                print(f"Expressao: {linha} = {int(resultado) if resultado.is_integer() else resultado}")
+
+# Lista dos arquivos de entrada
+arquivos = ["expressoes1.txt", "expressoes2.txt", "expressoes3.txt"]
+
+# Executar a leitura e cálculo
+if __name__ == "__main__":
+    lerArquivos(arquivos)
