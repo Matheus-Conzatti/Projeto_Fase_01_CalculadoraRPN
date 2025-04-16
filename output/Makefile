@@ -1,7 +1,9 @@
+.PHONY: monitor
+
 MCU=atmega328p
 PROGRAMMER = arduino
 F_CPU=16000000UL
-BAUD=115200
+BAUD=9600
 PORT=COM5
 
 AS=avr-as
@@ -16,7 +18,7 @@ HEX=calculadora.hex
 
 ASFLAGS=-mmcu=$(MCU)
 LDFLAGS=
-AVRDUDE_FLAGS=-c arduino -p m328p -P $(PORT) -b 115200
+AVRDUDE_FLAGS=-c arduino -p m328p -P $(PORT) -b 9600
 
 all: $(HEX)
 
@@ -30,10 +32,10 @@ $(HEX): $(ELF)
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
 
 upload:
-	avrdude -c arduino -p atmega328p -P $(PORT) -b 115200 -U flash:w:calculadora.hex:i
+	$(AVRDUDE) -c arduino -p atmega328p -P $(PORT) -b <span class="math-inline">\(BAUD\) \-U flash\:w\:</span>(HEX):i
 
 monitor:
-	cmd /C type COM5
+	"C:\Program Files\PuTTY\putty.exe" -serial $(PORT) -sercfg $(BAUD),8,n,1
 
 clean:
 	powershell -Command "Remove-Item -Force -ErrorAction SilentlyContinue *.o, *.elf, *.hex"
